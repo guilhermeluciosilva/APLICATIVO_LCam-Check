@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>RDO LCam & Check | InspectRDO</title>
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            amber: {
+              400: '#fbbf24',
+              500: '#f59e0b',
+              600: '#d97706',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React 18 & Babel CDN for standalone instant browser execution -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <style>
+    /* Travar rolagem horizontal e otimizar para toque mobile */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow-x: hidden;
+      background-color: #020617;
+      color: #f8fafc;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    
+    /* Efeito de flash na captura */
+    @keyframes cameraFlash {
+      0% { opacity: 0.95; }
+      100% { opacity: 0; }
+    }
+    .animate-flash {
+      animation: cameraFlash 0.35s ease-out forwards;
+    }
+
+    /* Pulso suave de radar GPS */
+    @keyframes radarPulse {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .animate-radar {
+      animation: radarPulse 2s infinite ease-in-out;
+    }
+
+    /* Custom scrollbar para lista de registros */
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #f59e0b;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 flex justify-center items-center">
+  <div id="root" class="w-full h-full flex justify-center items-center"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Ícones SVG embutidos de alta precisão (Lucide Icons sem dependências de compilação)
+    const Icons = {
+      Camera: ({ className = "w-6 h-6" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+          <circle cx="12" cy="13" r="3"/>
+        </svg>
+      ),
+      CheckSquare: ({ className = "w-6 h-6" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="9 11 12 14 22 4"/>
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+        </svg>
+      ),
+      MapPin: ({ className = "w-5 h-5" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+      ),
+      Globe: ({ className = "w-4 h-4" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+      ),
+      Calendar: ({ className = "w-4 h-4" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+      ),
+      Sliders: ({ className = "w-4 h-4" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="4" y1="21" x2="4" y2="14"/>
+          <line x1="4" y1="10" x2="4" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="12"/>
+          <line x1="12" y1="8" x2="12" y2="3"/>
+          <line x1="20" y1="21" x2="20" y2="16"/>
+          <line x1="20" y1="12" x2="20" y2="3"/>
+          <line x1="1" y1="14" x2="7" y2="14"/>
+          <line x1="9" y1="8" x2="15" y2="8"/>
+          <line x1="17" y1="16" x2="23" y2="16"/>
+        </svg>
+      ),
+      SunMoon: ({ className = "w-5 h-5" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M12 3a9 9 0 0 1 0 18v-18z" fill="currentColor"/>
+        </svg>
+      ),
+      Type: ({ className = "w-5 h-5" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="4 7 4 4 20 4 20 7"/>
+          <line x1="9" y1="20" x2="15" y2="20"/>
+          <line x1="12" y1="4" x2="12" y2="20"/>
+        </svg>
+      ),
+      Trash2: ({ className = "w-5 h-5" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          <line x1="10" y1="11" x2="10" y2="17"/>
+          <line x1="14" y1="11" x2="14" y2="17"/>
+        </svg>
+      ),
+      PlusCircle: ({ className = "w-5 h-5" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="16"/>
+          <line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+      ),
+      CheckCircle2: ({ className = "w-6 h-6" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+          <path d="m9 12 2 2 4-4"/>
+        </svg>
+      ),
+      Crosshair: ({ className = "w-4 h-4" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="22" y1="12" x2="18" y2="12"/>
+          <line x1="6" y1="12" x2="2" y2="12"/>
+          <line x1="12" y1="6" x2="12" y2="2"/>
+          <line x1="12" y1="22" x2="12" y2="18"/>
+        </svg>
+      ),
+      ShieldAlert: ({ className = "w-4 h-4" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+      ),
+      Download: ({ className = "w-5 h-5" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      ),
+      X: ({ className = "w-5 h-5" }) => (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      )
+    };
+
+    // Imagens realistas de canteiro de obras de alta definição
+    const CONSTRUCTION_PHOTOS = [
+      "https://images.unsplash.com/photo-1541888946425-d0fbb186c5f7?auto=format&fit=crop&w=1000&q=80", // Estrutura de concreto e armação
+      "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1000&q=80", // Obra geral e guindastes
+      "https://images.unsplash.com/photo-1590496793929-36417d3117de?auto=format&fit=crop&w=1000&q=80", // Fundação e concretagem
+      "https://images.unsplash.com/photo-1581094288338-2314dddb7ece?auto=format&fit=crop&w=1000&q=80", // Instalações técnicas e tubulações
+      "https://images.unsplash.com/photo-1574689211272-bc14e289e223?auto=format&fit=crop&w=1000&q=80"  // Alvenaria e acabamento
+    ];
+
+    function App() {
+      // Estado da Navegação (2 abas estritas)
+      const [activeTab, setActiveTab] = useState('camera'); // 'camera' | 'checklist'
+
+      // Controles do Carimbo em Tempo Real
+      const [opacity, setOpacity] = useState(0.85); // 0.1 a 1.0
+      const [fontSizeLevel, setFontSizeLevel] = useState('medium'); // 'small' | 'medium' | 'large'
+      const [invertColors, setInvertColors] = useState(false); // false = Fundo escuro / Texto claro, true = Fundo claro / Texto escuro
+
+      // Relógio em tempo real
+      const [currentTime, setCurrentTime] = useState('');
+
+      // Efeitos de Câmera
+      const [isFlashing, setIsFlashing] = useState(false);
+      const [photoIndex, setPhotoIndex] = useState(0);
+      const [toastMessage, setToastMessage] = useState('');
+
+      // Estado do Checklist / Relatório Expresso
+      const [reportTitle, setReportTitle] = useState('Vistoria Técnica Térreo - Bloco A');
+      const [checklist, setChecklist] = useState([
+        {
+          id: 1,
+          photoUrl: CONSTRUCTION_PHOTOS[0],
+          address: "Av. Paulista, 1000 - Canteiro Central",
+          coords: "Lat: -23.5615° S | Long: -46.6559° W",
+          timestamp: "29/09/2026 - 15:39:17",
+          caption: "Conferência da armadura positiva da viga V-102. Espaçadores plásticos conferidos conforme projeto de cálculo estrutural.",
+          opacity: 0.85,
+          fontSizeLevel: 'medium',
+          invertColors: false
+        }
+      ]);
+
+      // Modal de Confirmação de Salvar Relatório
+      const [isModalOpen, setIsModalOpen] = useState(false);
+
+      // Atualizador do relógio do carimbo em tempo real
+      useEffect(() => {
+        const updateClock = () => {
+          const now = new Date();
+          const pad = (n) => String(n).padStart(2, '0');
+          const day = pad(now.getDate());
+          const month = pad(now.getMonth() + 1);
+          const year = now.getFullYear();
+          const hours = pad(now.getHours());
+          const minutes = pad(now.getMinutes());
+          const seconds = pad(now.getSeconds());
+          setCurrentTime(`${day}/${month}/${year} - ${hours}:${minutes}:${seconds}`);
+        };
+
+        updateClock();
+        const intervalId = setInterval(updateClock, 1000);
+        return () => clearInterval(intervalId);
+      }, []);
+
+      // Ciclo do tamanho da fonte: pequeno -> médio -> grande
+      const toggleFontSize = () => {
+        if (fontSizeLevel === 'small') setFontSizeLevel('medium');
+        else if (fontSizeLevel === 'medium') setFontSizeLevel('large');
+        else setFontSizeLevel('small');
+      };
+
+      // Mapeamento dinâmico de classes de fonte com base no estado
+      const getFontSizeClass = (level) => {
+        switch (level) {
+          case 'small':
+            return 'text-[9.5px] leading-tight';
+          case 'large':
+            return 'text-xs sm:text-sm leading-snug';
+          case 'medium':
+          default:
+            return 'text-[11px] leading-snug';
+        }
+      };
+
+      // Exibição do Toast com auto-dismiss
+      const triggerToast = (msg) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(''), 2600);
+      };
+
+      // Gatilho de Captura da Foto
+      const handleCapture = () => {
+        // 1. Efeito visual de flash do obturador
+        setIsFlashing(true);
+        setTimeout(() => setIsFlashing(false), 300);
+
+        // Feedback de vibração se suportado no dispositivo móvel
+        if (navigator.vibrate) {
+          navigator.vibrate(60);
+        }
+
+        // 2. Foto atual selecionada
+        const currentPhoto = CONSTRUCTION_PHOTOS[photoIndex % CONSTRUCTION_PHOTOS.length];
+
+        // 3. Montar novo registro fotográfico com o carimbo customizado no momento exato
+        const newRecord = {
+          id: Date.now(),
+          photoUrl: currentPhoto,
+          address: "Av. Paulista, 1000 - Canteiro Central",
+          coords: "Lat: -23.5615° S | Long: -46.6559° W",
+          timestamp: currentTime,
+          caption: `Registro de fiscalização de conformidade estrutural. Vistoria realizada no setor ${checklist.length + 1}.`,
+          opacity: opacity,
+          fontSizeLevel: fontSizeLevel,
+          invertColors: invertColors
+        };
+
+        // 4. Inserir no checklist
+        setChecklist((prev) => [...prev, newRecord]);
+
+        // 5. Avançar imagem para o próximo disparo
+        setPhotoIndex((prev) => prev + 1);
+
+        // 6. Notificação flutuante
+        triggerToast("Foto adicionada ao Checklist!");
+      };
+
+      // Excluir registro do checklist
+      const handleDeleteRecord = (id) => {
+        setChecklist((prev) => prev.filter((item) => item.id !== id));
+        triggerToast("Registro removido");
+      };
+
+      // Atualizar legenda de um registro específico
+      const handleCaptionChange = (id, newCaption) => {
+        setChecklist((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, caption: newCaption } : item))
+        );
+      };
+
+      // Adicionar registro manual no Checklist
+      const handleAddManualRecord = () => {
+        const currentPhoto = CONSTRUCTION_PHOTOS[(checklist.length + 2) % CONSTRUCTION_PHOTOS.length];
+        const newRecord = {
+          id: Date.now(),
+          photoUrl: currentPhoto,
+          address: "Av. Paulista, 1000 - Canteiro Central",
+          coords: "Lat: -23.5615° S | Long: -46.6559° W",
+          timestamp: currentTime,
+          caption: "Anotação de campo complementar inserida manualmente pelo encarregado.",
+          opacity: 0.85,
+          fontSizeLevel: 'medium',
+          invertColors: false
+        };
+        setChecklist((prev) => [...prev, newRecord]);
+        triggerToast("Novo registro manual criado!");
+      };
+
+      return (
+        <div className="relative w-full max-w-md h-[100dvh] bg-slate-950 text-slate-100 flex flex-col overflow-hidden shadow-2xl border-x border-slate-800 selection:bg-amber-400 selection:text-slate-950 font-sans">
+          
+          {/* EFEITO DE FLASH DA CÂMERA */}
+          {isFlashing && (
+            <div className="absolute inset-0 bg-white z-50 pointer-events-none animate-flash" />
+          )}
+
+          {/* TOAST FLUTUANTE DE SUCESSO */}
+          {toastMessage && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-slate-950 font-bold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 text-xs border border-amber-300 animate-bounce">
+              <Icons.CheckCircle2 className="w-4 h-4 text-slate-950" />
+              <span>{toastMessage}</span>
+            </div>
+          )}
+
+          {/* MODAL DE CONFIRMAÇÃO: SALVAR RELATÓRIO */}
+          {isModalOpen && (
+            <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+              <div className="w-full bg-slate-900 border-2 border-amber-500 rounded-3xl p-6 shadow-2xl text-slate-100 space-y-4 animate-in fade-in zoom-in duration-200">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                      <Icons.CheckSquare className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-white">Relatório Consolidado</h3>
+                      <p className="text-[11px] text-amber-400 font-mono">INSPECTRDO MOBILE</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsModalOpen(false)}
+                    className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-800 text-slate-400 hover:text-white"
+                  >
+                    <Icons.X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Título:</span>
+                    <span className="font-bold text-white text-right truncate max-w-[200px]">{reportTitle || "Sem título"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Total de Registros:</span>
+                    <span className="font-mono font-bold text-amber-400 text-sm">{checklist.length} fotos</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Data de Fechamento:</span>
+                    <span className="font-mono text-slate-300">{currentTime}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Local da Obra:</span>
+                    <span className="text-slate-300 font-medium">Av. Paulista, 1000</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-2">
+                  <button
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      triggerToast("Relatório exportado com sucesso!");
+                    }}
+                    className="w-full min-h-[48px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95 transition-all text-sm uppercase tracking-wide"
+                  >
+                    <Icons.Download className="w-5 h-5" />
+                    Baixar PDF & RDO Digital
+                  </button>
+                  <button
+                    onClick={() => setIsModalOpen(false)}
+                    className="w-full min-h-[48px] bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl text-xs"
+                  >
+                    Continuar Editando
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ÁREA PRINCIPAL DINÂMICA DAS TELAS */}
+          <main className="flex-1 flex flex-col overflow-hidden relative">
+            
+            {/* ============================================================== */}
+            {/* TELA 1: CÂMERA GEORREFERENCIADA (activeTab === 'camera')        */}
+            {/* ============================================================== */}
+            {activeTab === 'camera' && (
+              <div className="flex-1 flex flex-col relative h-full bg-black select-none">
+                
+                {/* 1. VISOR DA CÂMERA (Viewport Escuro com imagem de fundo e retículo) */}
+                <div className="relative flex-1 w-full overflow-hidden flex flex-col justify-between">
+                  {/* Foto de Fundo Simulando a Lente da Câmera em Tempo Real */}
+                  <img
+                    src={CONSTRUCTION_PHOTOS[photoIndex % CONSTRUCTION_PHOTOS.length]}
+                    alt="Visor da Câmera da Obra"
+                    className="absolute inset-0 w-full h-full object-cover object-center filter brightness-95 contrast-105"
+                  />
+
+                  {/* Gradiente sutil para legibilidade dos controles e carimbo */}
+                  <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/85 pointer-events-none" />
+
+                  {/* Grade de Guia da Câmera (Linhas de Enquadramento 3x3) */}
+                  <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-25">
+                    <div className="border-r border-b border-white/40" />
+                    <div className="border-r border-b border-white/40" />
+                    <div className="border-b border-white/40" />
+                    <div className="border-r border-b border-white/40" />
+                    <div className="border-r border-b border-white/40 flex items-center justify-center">
+                      {/* Mira Central de Precisão */}
+                      <Icons.Crosshair className="w-8 h-8 text-amber-400/70" />
+                    </div>
+                    <div className="border-b border-white/40" />
+                    <div className="border-r border-white/40" />
+                    <div className="border-r border-white/40" />
+                    <div />
+                  </div>
+
+                  {/* TOPO: INDICADOR DE STATUS GPS EM ALTA PRECISÃO */}
+                  <header className="relative z-10 pt-3 px-3 flex items-center justify-between">
+                    <div className="inline-flex items-center gap-2 bg-slate-950/85 backdrop-blur-md border border-amber-500/50 px-3 py-1.5 rounded-full shadow-lg">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-radar" />
+                      <span className="text-[11px] font-mono font-black text-amber-400 tracking-wider uppercase">
+                        GPS ATIVO (ALTA PRECISÃO)
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-950/80 backdrop-blur-md px-2.5 py-1 rounded-full border border-slate-700/80 text-[10px] font-mono text-slate-300">
+                      ±1.2m • 762m ALT
+                    </div>
+                  </header>
+
+                  {/* ÁREA INFERIOR DA CÂMERA: CONTROLES + OVERLAY DO CARIMBO + DISPARADOR */}
+                  <div className="relative z-10 p-3 space-y-2.5">
+                    
+                    {/* 2. CONTROLES DINÂMICOS DE EDIÇÃO (Acima do Overlay do Carimbo) */}
+                    <div className="bg-slate-950/90 backdrop-blur-md border border-slate-800/90 rounded-2xl p-2.5 flex items-center justify-between gap-3 shadow-2xl">
+                      
+                      {/* Controle Deslizante de Opacidade */}
+                      <div className="flex-1 flex items-center gap-2 min-w-0">
+                        <Icons.Sliders className="w-4 h-4 text-amber-400 shrink-0" />
+                        <div className="flex-1 flex flex-col">
+                          <div className="flex justify-between items-center text-[10px] text-slate-300 font-mono mb-0.5">
+                            <span className="font-semibold text-slate-400 uppercase tracking-tighter">Opacidade</span>
+                            <span className="font-bold text-amber-400">{Math.round(opacity * 100)}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="1.0"
+                            step="0.05"
+                            value={opacity}
+                            onChange={(e) => setOpacity(parseFloat(e.target.value))}
+                            className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-400 focus:outline-none"
+                            aria-label="Controle de Opacidade do Carimbo"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Botão Ícone "T": Alterna ciclicamente tamanho da fonte (P, M, G) */}
+                      <button
+                        onClick={toggleFontSize}
+                        title="Alternar Tamanho da Fonte"
+                        className="min-h-[48px] px-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:scale-95 border border-slate-700 flex items-center gap-1.5 text-slate-200 transition-all"
+                        aria-label="Alternar tamanho da fonte do carimbo"
+                      >
+                        <Icons.Type className="w-4 h-4 text-amber-400" />
+                        <span className="text-[10px] font-mono font-bold uppercase text-amber-300">
+                          {fontSizeLevel === 'small' ? 'P' : fontSizeLevel === 'medium' ? 'M' : 'G'}
+                        </span>
+                      </button>
+
+                      {/* Botão Inversão de Cor: Alterna Fundo Escuro/Claro */}
+                      <button
+                        onClick={() => setInvertColors((prev) => !prev)}
+                        title="Inverter Contraste de Cores"
+                        className={`min-h-[48px] px-3 rounded-xl border flex items-center justify-center transition-all active:scale-95 ${
+                          invertColors 
+                            ? 'bg-amber-400 text-slate-950 border-amber-300 font-bold' 
+                            : 'bg-slate-800/90 text-slate-200 border-slate-700 hover:bg-slate-700'
+                        }`}
+                        aria-label="Inverter cores do carimbo"
+                      >
+                        <Icons.SunMoon className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* 3. OVERLAY DO CARIMBO GEORREFERENCIADO (Canto Inferior Esquerdo) */}
+                    <div
+                      style={{
+                        backgroundColor: invertColors
+                          ? `rgba(255, 255, 255, ${opacity})`
+                          : `rgba(15, 23, 42, ${opacity})`,
+                      }}
+                      className={`w-full rounded-2xl p-2.5 sm:p-3 border backdrop-blur-sm transition-all duration-150 flex items-stretch justify-between gap-2.5 shadow-2xl ${
+                        invertColors
+                          ? 'border-slate-300/80 text-slate-950'
+                          : 'border-amber-500/40 text-slate-100'
+                      }`}
+                    >
+                      {/* Dados Textuais do Carimbo */}
+                      <div className={`flex-1 flex flex-col justify-center space-y-1 font-mono ${getFontSizeClass(fontSizeLevel)}`}>
+                        {/* Header do Carimbo */}
+                        <div className="flex items-center gap-1.5 pb-0.5">
+                          <span className={`font-black uppercase tracking-wider px-1.5 py-0.5 rounded text-[9px] ${
+                            invertColors ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-amber-400 text-slate-950 font-bold'
+                          }`}>
+                            RDO LAUDO FOTOGRÁFICO
+                          </span>
+                        </div>
+
+                        {/* Endereço Fictício */}
+                        <div className="flex items-start gap-1 font-sans">
+                          <span className="text-amber-500 shrink-0">📍</span>
+                          <span className="font-semibold truncate">
+                            Av. Paulista, 1000 - Canteiro Central
+                          </span>
+                        </div>
+
+                        {/* Coordenadas GPS */}
+                        <div className="flex items-center gap-1">
+                          <span className="text-amber-500 shrink-0">🌐</span>
+                          <span className="font-medium opacity-90 truncate">
+                            Lat: -23.5615° S | Long: -46.6559° W
+                          </span>
+                        </div>
+
+                        {/* Data e Hora em Tempo Real */}
+                        <div className="flex items-center gap-1">
+                          <span className="text-amber-500 shrink-0">📅</span>
+                          <span className="font-bold text-amber-500">
+                            {currentTime || "Carregando satélites..."}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Mini-Mapa Integrado (Canto Direito do Bloco) */}
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl bg-emerald-950/90 border border-emerald-500/60 overflow-hidden relative flex flex-col items-center justify-between p-1 shadow-inner">
+                        {/* Grade Simulação de Topografia/Radar */}
+                        <div className="absolute inset-0 opacity-30 bg-[linear-gradient(to_right,#10b981_1px,transparent_1px),linear-gradient(to_bottom,#10b981_1px,transparent_1px)] bg-[size:8px_8px]" />
+                        
+                        <div className="relative z-10 w-full flex justify-between items-center px-0.5">
+                          <span className="text-[8px] font-mono font-black text-emerald-400 tracking-tighter">MAPA</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                        </div>
+
+                        {/* Pino de Localização Animado */}
+                        <div className="relative z-10 flex flex-col items-center my-auto">
+                          <Icons.MapPin className="w-6 h-6 text-amber-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] animate-bounce" />
+                        </div>
+
+                        <span className="relative z-10 text-[7px] font-mono text-emerald-300 font-bold">
+                          SP • BRASIL
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 4. GATILHO DE CAPTURA (Botão Redondo Grande Amarelo Centralizado) */}
+                    <div className="flex items-center justify-center pt-2 pb-1">
+                      <button
+                        onClick={handleCapture}
+                        title="Capturar Foto Georreferenciada"
+                        className="w-20 h-20 rounded-full border-4 border-amber-400/90 bg-amber-500 hover:bg-amber-400 active:scale-90 transition-all duration-150 flex items-center justify-center shadow-[0_0_25px_rgba(245,158,11,0.5)] cursor-pointer"
+                        aria-label="Disparar obturador e registrar foto"
+                      >
+                        <div className="w-14 h-14 rounded-full border-2 border-slate-950/80 bg-amber-400 flex items-center justify-center">
+                          <Icons.Camera className="w-8 h-8 text-slate-950" />
+                        </div>
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ============================================================== */}
+            {/* TELA 2: CHECKLIST / RELATÓRIO EXPRESSO (activeTab === 'checklist') */}
+            {/* ============================================================== */}
+            {activeTab === 'checklist' && (
+              <div className="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden">
+                
+                {/* 1. CABEÇALHO DO RELATÓRIO FIXO NO TOPO */}
+                <div className="p-3.5 bg-slate-900 border-b border-slate-800 space-y-2 shrink-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-mono font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Icons.CheckSquare className="w-4 h-4" />
+                      Relatório Fotográfico Diário (RDO)
+                    </span>
+                    <span className="text-[10px] font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300">
+                      {checklist.length} {checklist.length === 1 ? 'item' : 'itens'}
+                    </span>
+                  </div>
+
+                  {/* Input de Texto em Destaque Conforme Especificação */}
+                  <input
+                    type="text"
+                    value={reportTitle}
+                    onChange={(e) => setReportTitle(e.target.value)}
+                    placeholder="Título do Relatório (ex: Vistoria Térreo)"
+                    className="w-full bg-white border-2 border-slate-300 focus:border-amber-500 rounded-xl p-3 font-bold text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none transition-colors"
+                  />
+                </div>
+
+                {/* 2. LISTA EMPILHADA DE REGISTROS (Cards Fotográficos com Scroll) */}
+                <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
+                  {checklist.length === 0 ? (
+                    <div className="h-64 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-slate-800 rounded-2xl bg-slate-900/40">
+                      <Icons.Camera className="w-12 h-12 text-slate-600 mb-2" />
+                      <h4 className="font-bold text-white text-sm">Nenhum registro capturado</h4>
+                      <p className="text-xs text-slate-400 mt-1 max-w-[220px]">
+                        Utilize a aba Câmera para capturar fotos georreferenciadas ou adicione manualmente.
+                      </p>
+                      <button
+                        onClick={() => setActiveTab('camera')}
+                        className="mt-4 px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-1.5"
+                      >
+                        <Icons.Camera className="w-4 h-4" />
+                        Abrir Câmera
+                      </button>
+                    </div>
+                  ) : (
+                    checklist.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-lg p-3 space-y-3"
+                      >
+                        {/* Cabeçalho do Card: Numeração e Botão de Excluir */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 font-mono font-black text-xs flex items-center justify-center shadow">
+                              #{index + 1}
+                            </span>
+                            <span className="font-bold text-sm text-white">
+                              Registro #{index + 1}
+                            </span>
+                          </div>
+
+                          {/* Botão de Excluir (Lixeira) - Mínimo 48px acessível para luvas */}
+                          <button
+                            onClick={() => handleDeleteRecord(item.id)}
+                            title="Excluir este registro"
+                            className="min-w-[48px] min-h-[48px] flex items-center justify-center rounded-xl bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-800/50 active:scale-95 transition-all"
+                            aria-label={`Excluir registro número ${index + 1}`}
+                          >
+                            <Icons.Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+
+                        {/* Bloco da Imagem: Exibe a foto da obra com carimbo impresso na parte inferior */}
+                        <div className="relative w-full h-52 rounded-xl overflow-hidden border border-slate-700 bg-black">
+                          <img
+                            src={item.photoUrl}
+                            alt={`Registro fotográfico ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+
+                          {/* Carimbo Georreferenciado Impresso sobre a Foto no Card */}
+                          <div
+                            style={{
+                              backgroundColor: item.invertColors
+                                ? `rgba(255, 255, 255, ${item.opacity || 0.85})`
+                                : `rgba(15, 23, 42, ${item.opacity || 0.85})`,
+                            }}
+                            className={`absolute bottom-1.5 left-1.5 right-1.5 p-2 rounded-xl border backdrop-blur-xs flex items-center justify-between gap-2 ${
+                              item.invertColors
+                                ? 'border-slate-300 text-slate-950'
+                                : 'border-amber-500/40 text-slate-100'
+                            }`}
+                          >
+                            <div className="flex-1 font-mono text-[9.5px] leading-tight space-y-0.5 truncate">
+                              <div className="font-bold text-amber-500 truncate flex items-center gap-1">
+                                <span>📍</span> {item.address}
+                              </div>
+                              <div className="opacity-90 truncate">
+                                <span>🌐</span> {item.coords}
+                              </div>
+                              <div className="font-bold opacity-95">
+                                <span>📅</span> {item.timestamp}
+                              </div>
+                            </div>
+
+                            {/* Mini-tag de GPS no card */}
+                            <div className="px-1.5 py-1 rounded bg-emerald-950 border border-emerald-500/60 text-emerald-400 text-[8px] font-mono font-bold flex flex-col items-center shrink-0">
+                              <Icons.MapPin className="w-3.5 h-3.5 text-amber-400" />
+                              <span>GPS</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Textarea de Legenda: Campo multilinha (rows={2}) */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-mono text-slate-400 uppercase font-semibold flex items-center justify-between">
+                            <span>Parecer Técnico / Observação</span>
+                            <span className="text-amber-500">{item.caption.length} caracteres</span>
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={item.caption}
+                            onChange={(e) => handleCaptionChange(item.id, e.target.value)}
+                            placeholder="Legenda / Observação"
+                            className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl p-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none transition-colors resize-none font-sans"
+                          />
+                        </div>
+                      </div>
+                    ))
+                  )}
+
+                  {/* 3. BOTÃO "+ ADICIONAR REGISTRO" MANUAL */}
+                  <button
+                    onClick={handleAddManualRecord}
+                    className="w-full min-h-[48px] bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold border-2 border-dashed border-amber-500/50 rounded-2xl flex items-center justify-center gap-2 text-xs py-3 active:scale-98 transition-all"
+                  >
+                    <Icons.PlusCircle className="w-5 h-5 text-amber-400" />
+                    + Adicionar Registro Fotográfico
+                  </button>
+                </div>
+
+                {/* 3. BOTÃO "SALVAR RELATÓRIO" NO RODAPÉ */}
+                <div className="p-3.5 bg-slate-900 border-t border-slate-800 shrink-0">
+                  <button
+                    onClick={() => setIsModalOpen(true)}
+                    className="w-full min-h-[48px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-3.5 px-4 rounded-xl shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 text-sm uppercase tracking-wide active:scale-95 transition-all"
+                  >
+                    <Icons.CheckSquare className="w-5 h-5 text-slate-950" />
+                    Salvar Relatório ({checklist.length} {checklist.length === 1 ? 'registro' : 'registros'})
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+          </main>
+
+          {/* ============================================================== */}
+          {/* NAVEGAÇÃO INFERIOR FIXA (Bottom Navigation Bar)                */}
+          {/* ============================================================== */}
+          <nav className="h-20 bg-slate-950 border-t border-slate-800 px-6 flex items-center justify-around z-30 shrink-0 select-none">
+            
+            {/* Aba 1: [📷 Câmera] */}
+            <button
+              onClick={() => setActiveTab('camera')}
+              className={`flex-1 flex flex-col items-center justify-center min-h-[52px] py-1.5 transition-colors relative ${
+                activeTab === 'camera'
+                  ? 'text-amber-400 font-black'
+                  : 'text-slate-400 hover:text-slate-200 font-medium'
+              }`}
+            >
+              <div className="relative">
+                <Icons.Camera className={`w-6 h-6 ${activeTab === 'camera' ? 'stroke-[2.5]' : ''}`} />
+                {activeTab === 'camera' && (
+                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-amber-400" />
+                )}
+              </div>
+              <span className="text-[11px] mt-1 tracking-tight">Câmera</span>
+            </button>
+
+            {/* Aba 2: [📋 Checklist] com Badge Contador de Fotos */}
+            <button
+              onClick={() => setActiveTab('checklist')}
+              className={`flex-1 flex flex-col items-center justify-center min-h-[52px] py-1.5 transition-colors relative ${
+                activeTab === 'checklist'
+                  ? 'text-amber-400 font-black'
+                  : 'text-slate-400 hover:text-slate-200 font-medium'
+              }`}
+            >
+              <div className="relative">
+                <Icons.CheckSquare className={`w-6 h-6 ${activeTab === 'checklist' ? 'stroke-[2.5]' : ''}`} />
+                
+                {/* Badge com Contador de Registros */}
+                {checklist.length > 0 && (
+                  <span className="absolute -top-1.5 -right-3.5 bg-amber-500 text-slate-950 text-[10px] font-mono font-black rounded-full px-1.5 py-0.2 shadow-md min-w-[18px] text-center">
+                    {checklist.length}
+                  </span>
+                )}
+
+                {activeTab === 'checklist' && (
+                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-amber-400" />
+                )}
+              </div>
+              <span className="text-[11px] mt-1 tracking-tight">Checklist</span>
+            </button>
+
+          </nav>
+
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
