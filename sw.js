@@ -1,9 +1,10 @@
 // Service Worker para LCam & Check
-const CACHE_NAME = 'lcam-check-v1';
+const CACHE_NAME = 'lcam-check-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './css/styles.css',
+  './js/db.js',
   './js/state.js',
   './js/camera.js',
   './js/report.js',

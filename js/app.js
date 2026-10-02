@@ -161,13 +161,17 @@ function setupSettingsModal() {
     setToggle('toggle-show-compass', s.showCompass);
     setToggle('toggle-show-minimap', s.showMiniMap);
     setToggle('toggle-show-projecttag', s.showProjectTag);
+    setToggle('toggle-allow-manual-address', s.allowManualAddress);
 
     // Campos de texto
     const tagInput = document.getElementById('input-setting-projecttag');
     if (tagInput) tagInput.value = s.projectTag || '';
 
     const addrInput = document.getElementById('input-setting-customaddr');
-    if (addrInput) addrInput.value = s.customAddress || '';
+    if (addrInput) {
+      addrInput.value = s.customAddress || '';
+      addrInput.parentElement.style.display = s.allowManualAddress ? 'block' : 'none';
+    }
   };
 
   // Event Listeners nos inputs
@@ -206,6 +210,15 @@ function setupSettingsModal() {
   bindToggle('toggle-show-compass', 'showCompass');
   bindToggle('toggle-show-minimap', 'showMiniMap');
   bindToggle('toggle-show-projecttag', 'showProjectTag');
+
+  const addrToggle = document.getElementById('toggle-allow-manual-address');
+  if (addrToggle) {
+    addrToggle.addEventListener('change', (e) => {
+      window.appState.updateOverlaySetting('allowManualAddress', e.target.checked);
+      const addrInput = document.getElementById('input-setting-customaddr');
+      if (addrInput) addrInput.parentElement.style.display = e.target.checked ? 'block' : 'none';
+    });
+  }
 
   // Inputs de Texto
   const tagInput = document.getElementById('input-setting-projecttag');
@@ -248,9 +261,9 @@ function setupSensorSimulationModal() {
 
   if (applyBtn) {
     applyBtn.onclick = () => {
-      const lat = parseFloat(document.getElementById('sim-lat').value) || -23.55052;
-      const lng = parseFloat(document.getElementById('sim-lng').value) || -46.633308;
-      const alt = parseFloat(document.getElementById('sim-alt').value) || 760;
+      const lat = parseFloat(document.getElementById('sim-lat').value) || window.appState.sensorData.gps.lat || 0;
+      const lng = parseFloat(document.getElementById('sim-lng').value) || window.appState.sensorData.gps.lng || 0;
+      const alt = parseFloat(document.getElementById('sim-alt').value) || window.appState.sensorData.gps.altitude || 0;
       const heading = parseFloat(document.getElementById('sim-heading').value) || 0;
 
       window.appState.updateGps(lat, lng, alt, 8, false);

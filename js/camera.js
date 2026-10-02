@@ -459,7 +459,8 @@ class CameraModule {
     const addrEl = document.getElementById('overlay-address');
     if (addrEl) {
       addrEl.parentElement.style.display = settings.showAddress ? 'flex' : 'none';
-      if (settings.customAddress) {
+      addrEl.setAttribute('contenteditable', settings.allowManualAddress ? 'true' : 'false');
+      if (settings.allowManualAddress && settings.customAddress) {
         addrEl.innerText = settings.customAddress;
       } else if (sensors.address.stale) {
         addrEl.innerText = 'Endereço indisponível (offline)';
@@ -512,6 +513,12 @@ class CameraModule {
   async capturePhoto() {
     if (this.isCapturing) return;
     this.isCapturing = true;
+
+    if (!this.videoElement || !this.stream || !this.videoElement.videoWidth) {
+      this.isCapturing = false;
+      document.getElementById('camera-fallback-input')?.click();
+      return;
+    }
 
     // Flash visual
     const flashEl = document.getElementById('camera-flash');
@@ -635,7 +642,7 @@ class CameraModule {
     }
     ctx.fillText(`BÚSSOLA: ${sensors.compass.heading || 0}° ${sensors.compass.cardinal || ''}`, boxX + pad, boxY + 102);
 
-    const addr = settings.customAddress || sensors.address.formatted || 'Local não georreferenciado';
+    const addr = (settings.allowManualAddress && settings.customAddress) ? settings.customAddress : (sensors.address.formatted || 'Local não georreferenciado');
     ctx.fillText(`LOCAL: ${addr.slice(0, 65)}`, boxX + pad, boxY + 126);
   }
 
@@ -670,12 +677,12 @@ class CameraModule {
       const settings = window.appState.overlaySettings;
 
       const photoItem = {
-        id: 'photo_' + Date.now(),
+        id: 'photo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
         imageDataUrl: dataUrl,
         timestamp: sensors.currentTimeStr,
         gps: { ...sensors.gps },
-        address: settings.customAddress || sensors.address.formatted || 'Local não georreferenciado',
-        caption: 'Registro fotográfico da vistoria técnica. Sem irregularidades aparentes nesta inspeção.',
+        address: (settings.allowManualAddress && settings.customAddress) ? settings.customAddress : (sensors.address.formatted || 'Local não georreferenciado'),
+        caption: 'Registro fotográfico da vistoria técnica.',
         status: 'conforme', // 'conforme' | 'alerta' | 'nao-conforme'
         overlayTheme: settings.theme
       };
@@ -730,6 +737,25 @@ class CameraModule {
   // Pausa a câmera quando sai da tela
   cleanup() {
     this.pause();
+  }
+
+  // Fallback Capture Handler
+  async handleFallbackCapture(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    window.showToast('Processando foto da câmera...', 'info');
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      this.showCapturePreviewModal(e.target.result);
+      event.target.value = '';
+    };
+    reader.onerror = () => {
+      window.showToast('Erro ao processar imagem.', 'error');
+      event.target.value = '';
+    };
+    reader.readAsDataURL(file);
   }
 }
 

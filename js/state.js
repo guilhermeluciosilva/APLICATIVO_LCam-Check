@@ -22,6 +22,7 @@ const DEFAULT_OVERLAY_SETTINGS = {
   showCompass: true,
   showMiniMap: true,
   showProjectTag: true,
+  allowManualAddress: false,
   projectTag: 'OBRA: Edifício Horizonte - Bloco A',
   customAddress: '',
   technicianTag: 'Eng. Civil / Vistoria Técnica'
@@ -42,7 +43,8 @@ class AppState {
     this.currentScreen = 'home'; // 'home' | 'camera' | 'report'
     this.overlaySettings = this.loadOverlaySettings();
     this.reportHeader = this.loadReportHeader();
-    this.reportPhotos = this.loadReportPhotos();
+    this.reportPhotos = [];
+    this.loadReportPhotos();
 
     // Sensores em tempo real
     this.sensorData = {
@@ -64,8 +66,8 @@ class AppState {
         isLoading: false
       },
       compass: {
-        heading: 142,
-        cardinal: 'SE',
+        heading: null,
+        cardinal: '',
         hasMagnetometer: false
       },
       currentTimeStr: ''
@@ -142,17 +144,16 @@ class AppState {
     this.notify('reportHeader');
   }
 
-  loadReportPhotos() {
-    window.db.getPhotos().then(photos => {
-      // Sort by order if available, else by id descending
+  async loadReportPhotos() {
+    try {
+      const photos = await window.db.getPhotos();
       photos.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || b.id.localeCompare(a.id));
       this.reportPhotos = photos || [];
       this.notify('reportPhotos');
-    }).catch(e => {
+    } catch (e) {
       console.warn('Erro DB:', e);
       this.reportPhotos = [];
-    });
-    return [];
+    }
   }
 
   async saveReportPhotos() {
@@ -173,7 +174,7 @@ class AppState {
     this.reportPhotos.unshift(photoObj);
     try {
       await window.db.savePhoto(photoObj);
-      this.saveReportPhotos(); // reordena e salva todos
+      await this.saveReportPhotos(); // reordena e salva todos
     } catch(e) { console.warn(e); }
   }
 

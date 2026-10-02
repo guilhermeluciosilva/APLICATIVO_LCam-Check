@@ -92,7 +92,25 @@ class ReportModule {
         if (!file.type.startsWith('image/')) continue;
         try {
           const base64 = await this.readFileAsDataUrl(file);
-          const gpsStr = { lat: 0, lng: 0, altitude: 0, accuracy: 0, status: 'manual' };
+          const sensors = window.appState.sensorData;
+          let gpsStr = { 
+            lat: sensors.gps.lat !== null ? sensors.gps.lat : null, 
+            lng: sensors.gps.lng !== null ? sensors.gps.lng : null, 
+            altitude: sensors.gps.altitude || 0, 
+            accuracy: sensors.gps.accuracy || 0, 
+            status: 'manual' 
+          };
+          
+          try {
+             if (window.exifr) {
+               const exifGps = await window.exifr.gps(file);
+               if (exifGps && exifGps.latitude && exifGps.longitude) {
+                 gpsStr = { lat: exifGps.latitude, lng: exifGps.longitude, altitude: 0, accuracy: 0, status: 'ok' };
+               }
+             }
+          } catch(e) {}
+          
+          const settings = window.appState.overlaySettings;
           
           const photoItem = {
             id: 'photo_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
@@ -186,11 +204,11 @@ class ReportModule {
     const sensors = window.appState.sensorData;
 
     const sampleItem = {
-      id: 'photo_sample_' + Date.now(),
+      id: 'photo_sample_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
       imageDataUrl: base64,
       timestamp: sensors.currentTimeStr || new Date().toLocaleString('pt-BR'),
-      gps: { lat: -23.55052, lng: -46.633308, altitude: 760, accuracy: 8 },
-      address: 'Av. Paulista, 1000 - Bela Vista, São Paulo - SP',
+      gps: sensors.gps.lat !== null ? { ...sensors.gps } : { lat: null, lng: null, altitude: 0, accuracy: 0 },
+      address: sensors.address.formatted || 'Local de Amostra',
       caption: 'Inspeção das armaduras positivas da laje L4. Espaçamento de 15cm verificado conforme projeto executivo estrutural.',
       status: 'conforme',
       overlayTheme: 'dark',
@@ -277,7 +295,7 @@ class ReportModule {
             
             <!-- Badge de Geotagging no card -->
             <div class="absolute bottom-2 left-2 right-2 bg-slate-900/85 backdrop-blur-sm border border-slate-700/80 p-2 rounded text-[11px] font-mono text-slate-200 pointer-events-none">
-              <div class="text-amber-400 font-bold truncate">GPS: ${photo.gps.lat.toFixed(5)}°, ${photo.gps.lng.toFixed(5)}° | Alt: ${photo.gps.altitude || 0}m</div>
+              <div class="text-amber-400 font-bold truncate">${photo.gps.lat !== null && photo.gps.lat !== undefined ? `GPS: ${photo.gps.lat.toFixed(5)}°, ${photo.gps.lng.toFixed(5)}° | Alt: ${photo.gps.altitude || 0}m` : 'GPS indisponível'}</div>
               <div class="truncate text-slate-300">${this.esc(photo.address)}</div>
             </div>
           </div>
@@ -515,7 +533,8 @@ class ReportModule {
     doc.setTextColor(245, 158, 11);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
-    doc.text(`FOTO #${indexNum} | ${photo.timestamp} | GPS: ${photo.gps.lat.toFixed(5)}°, ${photo.gps.lng.toFixed(5)}° (Alt: ${photo.gps.altitude}m)`, margin + 3, stampY + 5.5);
+    const gpsTxt = photo.gps.lat !== null && photo.gps.lat !== undefined ? `GPS: ${photo.gps.lat.toFixed(5)}°, ${photo.gps.lng.toFixed(5)}° (Alt: ${photo.gps.altitude}m)` : 'GPS: Indisponível';
+    doc.text(`FOTO #${indexNum} | ${photo.timestamp} | ${gpsTxt}`, margin + 3, stampY + 5.5);
 
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'normal');
